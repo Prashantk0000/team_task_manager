@@ -44,16 +44,20 @@ npm run dev
 # Server runs at http://localhost:3000
 ```
 
-## Deployment on Railway
+## Deployment on Render
 
 1. Push code to GitHub
-2. Go to [Railway.app](https://railway.app) → New Project → Deploy from GitHub
-3. Set environment variables:
+2. Go to [Render.com](https://render.com) → **New** → **Web Service**
+3. Connect your GitHub repository
+4. Configure the service:
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Runtime**: Node
+5. Add environment variables in the **Environment** tab:
    - `JWT_SECRET` = your secret key
    - `NODE_ENV` = production
-   - `PORT` = 3000
-4. Railway auto-detects Node.js and runs `npm start`
-5. Your app is live!
+6. Click **Deploy** — Render auto-detects Node.js and deploys
+7. Your app is live on your `.onrender.com` URL! 🚀
 
 ## API Endpoints
 
