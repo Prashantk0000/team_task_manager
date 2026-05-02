@@ -12,7 +12,6 @@ const Task = sequelize.define('Task', {
     allowNull: false,
     validate: {
       notEmpty: { msg: 'Task title is required' },
-      len: { args: [2, 300], msg: 'Title must be between 2 and 300 characters' },
     },
   },
   description: {
@@ -21,7 +20,7 @@ const Task = sequelize.define('Task', {
     defaultValue: '',
   },
   status: {
-    type: DataTypes.ENUM('todo', 'in-progress', 'done'),
+    type: DataTypes.STRING(20),
     allowNull: false,
     defaultValue: 'todo',
     validate: {
@@ -32,7 +31,7 @@ const Task = sequelize.define('Task', {
     },
   },
   priority: {
-    type: DataTypes.ENUM('low', 'medium', 'high'),
+    type: DataTypes.STRING(10),
     allowNull: false,
     defaultValue: 'medium',
     validate: {
@@ -49,26 +48,14 @@ const Task = sequelize.define('Task', {
   project_id: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: 'projects',
-      key: 'id',
-    },
   },
   assigned_to: {
     type: DataTypes.INTEGER,
     allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id',
-    },
   },
   created_by: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id',
-    },
   },
 }, {
   tableName: 'tasks',

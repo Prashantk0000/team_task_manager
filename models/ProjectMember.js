@@ -10,21 +10,13 @@ const ProjectMember = sequelize.define('ProjectMember', {
   project_id: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: 'projects',
-      key: 'id',
-    },
   },
   user_id: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id',
-    },
   },
   role: {
-    type: DataTypes.ENUM('admin', 'member'),
+    type: DataTypes.STRING(10),
     allowNull: false,
     defaultValue: 'member',
     validate: {
@@ -36,12 +28,6 @@ const ProjectMember = sequelize.define('ProjectMember', {
   },
 }, {
   tableName: 'project_members',
-  indexes: [
-    {
-      unique: true,
-      fields: ['project_id', 'user_id'],
-    },
-  ],
 });
 
 module.exports = ProjectMember;
