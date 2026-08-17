@@ -20,6 +20,21 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Ensure Database is initialized on serverless request
+let dbInitPromise = null;
+app.use(async (req, res, next) => {
+  try {
+    if (!dbInitPromise) {
+      dbInitPromise = syncDatabase();
+    }
+    await dbInitPromise;
+    next();
+  } catch (err) {
+    console.error('Failed to sync database:', err);
+    res.status(500).json({ error: 'Database initialization error' });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
@@ -42,20 +57,19 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// Start server
-async function startServer() {
-  try {
-    await syncDatabase();
+// Start standalone server if executed directly (local dev)
+if (require.main === module) {
+  syncDatabase().then(() => {
     console.log('✅ Database synced successfully');
-
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📊 API available at http://localhost:${PORT}/api`);
     });
-  } catch (error) {
+  }).catch(error => {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
-  }
+  });
 }
 
-startServer();
+// Export Express app for Vercel Serverless Functions
+module.exports = app;
