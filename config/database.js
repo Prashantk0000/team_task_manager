@@ -44,7 +44,7 @@ async function syncDatabase() {
   User.hasMany(Task, { foreignKey: 'created_by', as: 'createdTasks' });
   Task.belongsTo(User, { foreignKey: 'created_by', as: 'taskCreator' });
 
-  await sequelize.sync({ force: true });
+  await sequelize.sync();
 }
 
 module.exports = { sequelize, syncDatabase };

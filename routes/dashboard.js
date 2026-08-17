@@ -126,7 +126,7 @@ router.get('/', async (req, res) => {
       },
       tasksPerUser: tasksPerUser.map(t => ({
         user: t.assignee,
-        taskCount: t.get('task_count'),
+        taskCount: parseInt(t.get('task_count'), 10) || 0,
       })),
       recentTasks,
       overdueTasks,

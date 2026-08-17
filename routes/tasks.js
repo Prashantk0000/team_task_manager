@@ -16,29 +16,26 @@ async function checkMembership(projectId, userId) {
   return membership;
 }
 
+const VALID_STATUSES = ['todo', 'in-progress', 'done'];
+const VALID_PRIORITIES = ['low', 'medium', 'high'];
+
 // GET /api/tasks?projectId=X — list tasks for a project
 router.get('/', async (req, res) => {
   try {
     const { projectId } = req.query;
+    const parsedProjectId = parseInt(projectId);
 
-    if (!projectId) {
-      return res.status(400).json({ error: 'projectId query parameter is required.' });
+    if (!projectId || isNaN(parsedProjectId)) {
+      return res.status(400).json({ error: 'Valid projectId query parameter is required.' });
     }
 
-    const membership = await checkMembership(projectId, req.userId);
+    const membership = await checkMembership(parsedProjectId, req.userId);
     if (!membership) {
       return res.status(403).json({ error: 'You are not a member of this project.' });
     }
 
-    const whereClause = { project_id: projectId };
-
-    // Members can only see tasks assigned to them
-    if (membership.role === 'member') {
-      whereClause.assigned_to = req.userId;
-    }
-
     const tasks = await Task.findAll({
-      where: whereClause,
+      where: { project_id: parsedProjectId },
       include: [
         { model: User, as: 'assignee', attributes: ['id', 'name', 'email'] },
         { model: User, as: 'taskCreator', attributes: ['id', 'name', 'email'] },
@@ -62,15 +59,16 @@ router.post('/', async (req, res) => {
   try {
     const { title, description, status, priority, due_date, project_id, assigned_to } = req.body;
 
-    if (!title || !title.trim()) {
+    if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ error: 'Task title is required.' });
     }
 
-    if (!project_id) {
-      return res.status(400).json({ error: 'Project ID is required.' });
+    const parsedProjectId = parseInt(project_id);
+    if (!project_id || isNaN(parsedProjectId)) {
+      return res.status(400).json({ error: 'Valid Project ID is required.' });
     }
 
-    const membership = await checkMembership(project_id, req.userId);
+    const membership = await checkMembership(parsedProjectId, req.userId);
     if (!membership) {
       return res.status(403).json({ error: 'You are not a member of this project.' });
     }
@@ -79,22 +77,25 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ error: 'Only admins can create tasks.' });
     }
 
-    // Validate assignee is a project member
-    if (assigned_to) {
-      const assigneeMembership = await checkMembership(project_id, assigned_to);
+    const parsedAssignee = assigned_to ? parseInt(assigned_to) : null;
+    if (parsedAssignee) {
+      const assigneeMembership = await checkMembership(parsedProjectId, parsedAssignee);
       if (!assigneeMembership) {
         return res.status(400).json({ error: 'Assigned user is not a member of this project.' });
       }
     }
 
+    const taskStatus = status && VALID_STATUSES.includes(status) ? status : 'todo';
+    const taskPriority = priority && VALID_PRIORITIES.includes(priority) ? priority : 'medium';
+
     const task = await Task.create({
       title: title.trim(),
-      description: (description || '').trim(),
-      status: status || 'todo',
-      priority: priority || 'medium',
+      description: typeof description === 'string' ? description.trim() : '',
+      status: taskStatus,
+      priority: taskPriority,
       due_date: due_date || null,
-      project_id,
-      assigned_to: assigned_to || null,
+      project_id: parsedProjectId,
+      assigned_to: parsedAssignee,
       created_by: req.userId,
     });
 
@@ -105,7 +106,7 @@ router.post('/', async (req, res) => {
       ],
     });
 
-    res.status(201).json({ message: 'Task created!', task: fullTask });
+    res.status(201).json({ message: 'Task created successfully!', task: fullTask });
   } catch (error) {
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map(e => e.message);
@@ -119,7 +120,12 @@ router.post('/', async (req, res) => {
 // PUT /api/tasks/:id — update a task
 router.put('/:id', async (req, res) => {
   try {
-    const task = await Task.findByPk(req.params.id);
+    const taskId = parseInt(req.params.id);
+    if (isNaN(taskId)) {
+      return res.status(400).json({ error: 'Invalid task ID.' });
+    }
+
+    const task = await Task.findByPk(taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found.' });
     }
@@ -136,23 +142,52 @@ router.put('/:id', async (req, res) => {
       if (task.assigned_to !== req.userId) {
         return res.status(403).json({ error: 'You can only update tasks assigned to you.' });
       }
-      // Members can only change status
-      if (status) task.status = status;
+      if (status) {
+        if (!VALID_STATUSES.includes(status)) {
+          return res.status(400).json({ error: 'Invalid status value.' });
+        }
+        task.status = status;
+      }
     } else {
       // Admins can update everything
-      if (title) task.title = title.trim();
-      if (description !== undefined) task.description = description.trim();
-      if (status) task.status = status;
-      if (priority) task.priority = priority;
-      if (due_date !== undefined) task.due_date = due_date || null;
+      if (title !== undefined) {
+        if (typeof title !== 'string' || !title.trim()) {
+          return res.status(400).json({ error: 'Task title cannot be empty.' });
+        }
+        task.title = title.trim();
+      }
+
+      if (description !== undefined) {
+        task.description = typeof description === 'string' ? description.trim() : '';
+      }
+
+      if (status) {
+        if (!VALID_STATUSES.includes(status)) {
+          return res.status(400).json({ error: 'Invalid status value.' });
+        }
+        task.status = status;
+      }
+
+      if (priority) {
+        if (!VALID_PRIORITIES.includes(priority)) {
+          return res.status(400).json({ error: 'Invalid priority value.' });
+        }
+        task.priority = priority;
+      }
+
+      if (due_date !== undefined) {
+        task.due_date = due_date || null;
+      }
+
       if (assigned_to !== undefined) {
-        if (assigned_to) {
-          const assigneeMembership = await checkMembership(task.project_id, assigned_to);
+        const parsedAssignee = assigned_to ? parseInt(assigned_to) : null;
+        if (parsedAssignee) {
+          const assigneeMembership = await checkMembership(task.project_id, parsedAssignee);
           if (!assigneeMembership) {
             return res.status(400).json({ error: 'Assigned user is not a member of this project.' });
           }
         }
-        task.assigned_to = assigned_to || null;
+        task.assigned_to = parsedAssignee;
       }
     }
 
@@ -165,8 +200,12 @@ router.put('/:id', async (req, res) => {
       ],
     });
 
-    res.json({ message: 'Task updated!', task: fullTask });
+    res.json({ message: 'Task updated successfully!', task: fullTask });
   } catch (error) {
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map(e => e.message);
+      return res.status(400).json({ error: messages.join(', ') });
+    }
     console.error('Update task error:', error);
     res.status(500).json({ error: 'Failed to update task.' });
   }
@@ -175,7 +214,12 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/tasks/:id — delete a task (admin only)
 router.delete('/:id', async (req, res) => {
   try {
-    const task = await Task.findByPk(req.params.id);
+    const taskId = parseInt(req.params.id);
+    if (isNaN(taskId)) {
+      return res.status(400).json({ error: 'Invalid task ID.' });
+    }
+
+    const task = await Task.findByPk(taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found.' });
     }

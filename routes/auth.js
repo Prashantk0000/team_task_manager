@@ -9,8 +9,19 @@ router.post('/register', async (req, res) => {
     const { name, email, password } = req.body;
 
     // Validation
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required.' });
+    if (!name || !email || !password || typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Name, email, and password are required strings.' });
+    }
+
+    const cleanName = name.trim();
+    const cleanEmail = email.toLowerCase().trim();
+
+    if (!cleanName) {
+      return res.status(400).json({ error: 'Name cannot be empty.' });
+    }
+
+    if (!cleanEmail) {
+      return res.status(400).json({ error: 'Email cannot be empty.' });
     }
 
     if (password.length < 6) {
@@ -18,15 +29,15 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ where: { email: email.toLowerCase().trim() } });
+    const existingUser = await User.findOne({ where: { email: cleanEmail } });
     if (existingUser) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
     // Create user
     const user = await User.create({
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
+      name: cleanName,
+      email: cleanEmail,
       password,
     });
 
@@ -52,11 +63,12 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required.' });
+    if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Email and password are required strings.' });
     }
 
-    const user = await User.findOne({ where: { email: email.toLowerCase().trim() } });
+    const cleanEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ where: { email: cleanEmail } });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }

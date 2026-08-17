@@ -17,6 +17,7 @@ async function api(method, path, body = null) {
 // ===== TOAST =====
 function toast(msg, type = 'info') {
   const c = document.getElementById('toast-container');
+  if (!c) return;
   const t = document.createElement('div');
   t.className = `toast ${type}`;
   t.textContent = msg;
@@ -26,33 +27,55 @@ function toast(msg, type = 'info') {
 
 // ===== MODAL =====
 function openModal(html) {
-  document.getElementById('modal-container').innerHTML = html;
-  document.getElementById('modal-overlay').classList.remove('hidden');
+  const overlay = document.getElementById('modal-overlay');
+  const container = document.getElementById('modal-container');
+  if (overlay && container) {
+    container.innerHTML = html;
+    overlay.classList.remove('hidden');
+  }
 }
-function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
-document.getElementById('modal-overlay')?.addEventListener('click', (e) => { if (e.target.id === 'modal-overlay') closeModal(); });
+function closeModal() {
+  const overlay = document.getElementById('modal-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+document.getElementById('modal-overlay')?.addEventListener('click', (e) => {
+  if (e.target.id === 'modal-overlay') closeModal();
+});
 
 // ===== AUTH STATE =====
 function setAuth(token, user) {
-  state.token = token; state.user = user;
-  localStorage.setItem('token', token);
+  state.token = token;
+  state.user = user;
+  if (token) localStorage.setItem('token', token);
+  else localStorage.removeItem('token');
   updateSidebar();
 }
+
 function logout() {
-  state.token = null; state.user = null;
-  localStorage.removeItem('token');
+  setAuth(null, null);
   navigate('/login');
 }
 
 function updateSidebar() {
   const sb = document.getElementById('sidebar');
-  if (!state.token) { sb.classList.add('hidden'); document.getElementById('main-content').classList.remove('with-sidebar'); return; }
+  const main = document.getElementById('main-content');
+  if (!sb || !main) return;
+
+  if (!state.token) {
+    sb.classList.add('hidden');
+    main.classList.remove('with-sidebar');
+    return;
+  }
   sb.classList.remove('hidden');
-  document.getElementById('main-content').classList.add('with-sidebar');
+  main.classList.add('with-sidebar');
+
   if (state.user) {
-    document.getElementById('user-name').textContent = state.user.name;
-    document.getElementById('user-email').textContent = state.user.email;
-    document.getElementById('user-avatar').textContent = state.user.name.charAt(0).toUpperCase();
+    const nameEl = document.getElementById('user-name');
+    const emailEl = document.getElementById('user-email');
+    const avatarEl = document.getElementById('user-avatar');
+    if (nameEl) nameEl.textContent = state.user.name;
+    if (emailEl) emailEl.textContent = state.user.email;
+    if (avatarEl) avatarEl.textContent = state.user.name.charAt(0).toUpperCase();
   }
 }
 
@@ -62,6 +85,7 @@ function navigate(path) { window.location.hash = path; }
 async function router() {
   const hash = window.location.hash.slice(1) || '/login';
   const main = document.getElementById('main-content');
+  if (!main) return;
 
   // Update nav active state
   document.querySelectorAll('.nav-link').forEach(l => {
@@ -70,8 +94,14 @@ async function router() {
 
   // Auth guard
   if (state.token && !state.user) {
-    try { const d = await api('GET', '/api/auth/me'); state.user = d.user; updateSidebar(); }
-    catch { logout(); return; }
+    try {
+      const d = await api('GET', '/api/auth/me');
+      state.user = d.user;
+      updateSidebar();
+    } catch {
+      logout();
+      return;
+    }
   }
 
   if (!state.token && !['/login', '/register'].includes(hash)) { navigate('/login'); return; }
@@ -80,11 +110,22 @@ async function router() {
   try {
     if (hash === '/login') main.innerHTML = renderLogin();
     else if (hash === '/register') main.innerHTML = renderRegister();
-    else if (hash === '/dashboard') { main.innerHTML = '<div class="page"><p style="color:var(--text-muted)">Loading dashboard...</p></div>'; await loadDashboard(main); }
-    else if (hash === '/projects') { main.innerHTML = '<div class="page"><p style="color:var(--text-muted)">Loading projects...</p></div>'; await loadProjects(main); }
-    else if (hash.startsWith('/projects/')) { main.innerHTML = '<div class="page"><p style="color:var(--text-muted)">Loading project...</p></div>'; await loadProjectDetail(main, hash.split('/')[2]); }
+    else if (hash === '/dashboard') {
+      main.innerHTML = '<div class="page"><p style="color:var(--text-muted)">Loading dashboard...</p></div>';
+      await loadDashboard(main);
+    }
+    else if (hash === '/projects') {
+      main.innerHTML = '<div class="page"><p style="color:var(--text-muted)">Loading projects...</p></div>';
+      await loadProjects(main);
+    }
+    else if (hash.startsWith('/projects/')) {
+      main.innerHTML = '<div class="page"><p style="color:var(--text-muted)">Loading project...</p></div>';
+      await loadProjectDetail(main, hash.split('/')[2]);
+    }
     else navigate('/dashboard');
-  } catch (err) { main.innerHTML = `<div class="page"><div class="empty-state"><h3>Error</h3><p>${err.message}</p></div></div>`; }
+  } catch (err) {
+    main.innerHTML = `<div class="page"><div class="empty-state"><h3>Error</h3><p>${esc(err.message)}</p></div></div>`;
+  }
   bindPageEvents();
 }
 
@@ -126,7 +167,6 @@ function renderRegister() {
 async function loadDashboard(main) {
   const data = await api('GET', '/api/dashboard');
   const s = data.stats;
-  const today = new Date().toISOString().split('T')[0];
   main.innerHTML = `<div class="page">
     <div class="page-header"><h1>Dashboard</h1><p>Overview of your projects and tasks</p></div>
     <div class="stats-grid">
@@ -140,10 +180,10 @@ async function loadDashboard(main) {
       <div class="stat-card warning"><div class="stat-label">My Pending</div><div class="stat-value">${s.myPendingTasks}</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div class="section-card"><h3>Tasks Per User</h3>${data.tasksPerUser.length ? `<table class="data-table"><thead><tr><th>User</th><th>Tasks</th></tr></thead><tbody>${data.tasksPerUser.map(t => `<tr><td>${esc(t.user?.name||'Unassigned')}</td><td>${t.taskCount}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--text-muted);font-size:0.85rem">No data yet</p>'}</div>
-      <div class="section-card"><h3>Overdue Tasks</h3>${data.overdueTasks.length ? `<table class="data-table"><thead><tr><th>Task</th><th>Project</th><th>Due</th></tr></thead><tbody>${data.overdueTasks.map(t => `<tr><td>${esc(t.title)}</td><td>${esc(t.project?.name||'')}</td><td style="color:var(--danger)">${t.due_date}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--text-muted);font-size:0.85rem">No overdue tasks 🎉</p>'}</div>
+      <div class="section-card"><h3>Tasks Per User</h3>${data.tasksPerUser.length ? `<table class="data-table"><thead><tr><th>User</th><th>Tasks</th></tr></thead><tbody>${data.tasksPerUser.map(t => `<tr><td>${esc(t.user?.name || 'Unassigned')}</td><td>${t.taskCount}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--text-muted);font-size:0.85rem">No data yet</p>'}</div>
+      <div class="section-card"><h3>Overdue Tasks</h3>${data.overdueTasks.length ? `<table class="data-table"><thead><tr><th>Task</th><th>Project</th><th>Due</th></tr></thead><tbody>${data.overdueTasks.map(t => `<tr><td>${esc(t.title)}</td><td>${esc(t.project?.name || '')}</td><td style="color:var(--danger);font-weight:600">${esc(t.due_date)}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--text-muted);font-size:0.85rem">No overdue tasks 🎉</p>'}</div>
     </div>
-    <div class="section-card" style="margin-top:16px"><h3>Recent Activity</h3>${data.recentTasks.length ? `<table class="data-table"><thead><tr><th>Task</th><th>Project</th><th>Assignee</th><th>Status</th></tr></thead><tbody>${data.recentTasks.map(t => `<tr><td>${esc(t.title)}</td><td>${esc(t.project?.name||'')}</td><td>${esc(t.assignee?.name||'—')}</td><td><span class="priority-badge ${t.status==='done'?'low':t.status==='in-progress'?'medium':'high'}">${t.status}</span></td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--text-muted);font-size:0.85rem">No tasks yet</p>'}</div>
+    <div class="section-card" style="margin-top:16px"><h3>Recent Activity</h3>${data.recentTasks.length ? `<table class="data-table"><thead><tr><th>Task</th><th>Project</th><th>Assignee</th><th>Status</th></tr></thead><tbody>${data.recentTasks.map(t => `<tr><td>${esc(t.title)}</td><td>${esc(t.project?.name || '')}</td><td>${esc(t.assignee?.name || 'Unassigned')}</td><td><span class="priority-badge ${t.status==='done'?'low':t.status==='in-progress'?'medium':'high'}">${t.status}</span></td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--text-muted);font-size:0.85rem">No tasks yet</p>'}</div>
   </div>`;
 }
 
@@ -184,13 +224,18 @@ async function loadProjectDetail(main, id) {
   main.innerHTML = `<div class="page" data-project-id="${p.id}" data-user-role="${userRole}">
     <a href="#/projects" class="back-link">← Back to Projects</a>
     <div class="toolbar">
-      <div class="page-header" style="margin-bottom:0"><h1>${esc(p.name)}</h1><p>${esc(p.description || '')}</p></div>
+      <div class="page-header" style="margin-bottom:0"><h1>${esc(p.name)}</h1><p>${esc(p.description || 'No description')}</p></div>
       <div class="toolbar-left">
-        ${isAdmin ? `<button class="btn btn-primary btn-sm" id="btn-new-task">+ New Task</button><button class="btn btn-secondary btn-sm" id="btn-add-member">+ Add Member</button><button class="btn btn-danger btn-sm" id="btn-delete-project">Delete</button>` : ''}
+        ${isAdmin ? `<button class="btn btn-primary btn-sm" id="btn-new-task">+ New Task</button><button class="btn btn-secondary btn-sm" id="btn-edit-project">Edit Project</button><button class="btn btn-secondary btn-sm" id="btn-add-member">+ Add Member</button><button class="btn btn-danger btn-sm" id="btn-delete-project">Delete</button>` : ''}
       </div>
     </div>
     <div class="members-section"><h3>Team Members</h3><div class="members-list">${p.members.map(m => `
-      <div class="member-chip"><div class="chip-avatar">${m.user.name.charAt(0).toUpperCase()}</div><span>${esc(m.user.name)}</span><span class="chip-role">${m.role}</span>${isAdmin && m.user.id !== state.user.id ? `<button class="chip-remove" data-remove-user="${m.user.id}" title="Remove member">×</button>` : ''}</div>`).join('')}</div></div>
+      <div class="member-chip">
+        <div class="chip-avatar">${m.user.name.charAt(0).toUpperCase()}</div>
+        <span>${esc(m.user.name)}</span>
+        ${isAdmin && m.user.id !== p.created_by ? `<select class="chip-role-select" data-change-role-user="${m.user.id}"><option value="member" ${m.role==='member'?'selected':''}>member</option><option value="admin" ${m.role==='admin'?'selected':''}>admin</option></select>` : `<span class="chip-role">${m.role}${m.user.id === p.created_by ? ' (creator)' : ''}</span>`}
+        ${isAdmin && m.user.id !== state.user?.id && m.user.id !== p.created_by ? `<button class="chip-remove" data-remove-user="${m.user.id}" title="Remove member">×</button>` : ''}
+      </div>`).join('')}</div></div>
     <div class="kanban-board">
       <div class="kanban-column"><div class="kanban-column-header"><h3>📋 To Do</h3><span class="kanban-count">${todo.length}</span></div><div class="kanban-cards">${todo.map(t => renderTaskCard(t, today, isAdmin)).join('')}</div></div>
       <div class="kanban-column"><div class="kanban-column-header"><h3>🔄 In Progress</h3><span class="kanban-count">${inProgress.length}</span></div><div class="kanban-cards">${inProgress.map(t => renderTaskCard(t, today, isAdmin)).join('')}</div></div>
@@ -202,15 +247,20 @@ async function loadProjectDetail(main, id) {
 function renderTaskCard(t, today, isAdmin) {
   const isOverdue = t.due_date && t.due_date < today && t.status !== 'done';
   const canChangeStatus = isAdmin || t.assigned_to === state.user?.id;
-  return `<div class="task-card" data-task-id="${t.id}">
-    <h4>${esc(t.title)}</h4>
+  const canEditTask = isAdmin || t.created_by === state.user?.id || t.assigned_to === state.user?.id;
+
+  return `<div class="task-card" data-task-id="${t.id}" data-can-edit="${canEditTask}">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+      <h4>${esc(t.title)}</h4>
+      ${isAdmin ? `<button class="btn btn-danger btn-sm" data-delete-task="${t.id}" style="padding:2px 6px;font-size:0.7rem;line-height:1" title="Delete task">×</button>` : ''}
+    </div>
     ${t.description ? `<p class="task-desc">${esc(t.description)}</p>` : ''}
     <div class="task-meta">
       <span class="priority-badge ${t.priority}">${t.priority}</span>
       ${t.due_date ? `<span class="task-due ${isOverdue?'overdue':''}">${isOverdue?'⚠ ':''}${t.due_date}</span>` : ''}
       <span class="task-assignee">${t.assignee ? esc(t.assignee.name) : 'Unassigned'}</span>
     </div>
-    ${canChangeStatus ? `<div style="margin-top:8px"><select class="status-select" data-task-status="${t.id}"><option value="todo" ${t.status==='todo'?'selected':''}>To Do</option><option value="in-progress" ${t.status==='in-progress'?'selected':''}>In Progress</option><option value="done" ${t.status==='done'?'selected':''}>Done</option></select>${isAdmin ? ` <button class="btn btn-danger btn-sm" data-delete-task="${t.id}" style="padding:3px 8px;font-size:0.7rem">×</button>` : ''}</div>` : ''}
+    ${canChangeStatus ? `<div style="margin-top:8px" onclick="event.stopPropagation()"><select class="status-select" data-task-status="${t.id}" data-prev="${t.status}"><option value="todo" ${t.status==='todo'?'selected':''}>To Do</option><option value="in-progress" ${t.status==='in-progress'?'selected':''}>In Progress</option><option value="done" ${t.status==='done'?'selected':''}>Done</option></select></div>` : ''}
   </div>`;
 }
 
@@ -245,15 +295,36 @@ function bindPageEvents() {
       <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Create</button></div></form>`);
     document.getElementById('modal-form').onsubmit = async (e) => {
       e.preventDefault();
-      try { await api('POST', '/api/projects', { name: document.getElementById('m-proj-name').value, description: document.getElementById('m-proj-desc').value }); closeModal(); toast('Project created!', 'success'); router(); }
-      catch (err) { toast(err.message, 'error'); }
+      try {
+        await api('POST', '/api/projects', { name: document.getElementById('m-proj-name').value, description: document.getElementById('m-proj-desc').value });
+        closeModal(); toast('Project created!', 'success'); router();
+      } catch (err) { toast(err.message, 'error'); }
+    };
+  });
+
+  // Edit project button
+  document.getElementById('btn-edit-project')?.addEventListener('click', async () => {
+    const projectId = document.querySelector('[data-project-id]')?.dataset.projectId;
+    const projData = await api('GET', `/api/projects/${projectId}`);
+    const p = projData.project;
+
+    openModal(`<div class="modal-header"><h2>Edit Project</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+      <form id="modal-form"><div class="form-group"><label>Project Name</label><input class="form-control" id="m-proj-name" required value="${esc(p.name)}"></div>
+      <div class="form-group"><label>Description</label><textarea class="form-control" id="m-proj-desc">${esc(p.description || '')}</textarea></div>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save Changes</button></div></form>`);
+    document.getElementById('modal-form').onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await api('PUT', `/api/projects/${projectId}`, { name: document.getElementById('m-proj-name').value, description: document.getElementById('m-proj-desc').value });
+        closeModal(); toast('Project updated!', 'success'); router();
+      } catch (err) { toast(err.message, 'error'); }
     };
   });
 
   // Project card click
   document.querySelectorAll('.project-card').forEach(c => c.addEventListener('click', () => navigate(`/projects/${c.dataset.id}`)));
 
-  // New task
+  // New task button
   document.getElementById('btn-new-task')?.addEventListener('click', async () => {
     const projectId = document.querySelector('[data-project-id]')?.dataset.projectId;
     const projData = await api('GET', `/api/projects/${projectId}`);
@@ -271,60 +342,164 @@ function bindPageEvents() {
     document.getElementById('modal-form').onsubmit = async (e) => {
       e.preventDefault();
       try {
-        await api('POST', '/api/tasks', { title: document.getElementById('m-task-title').value, description: document.getElementById('m-task-desc').value, priority: document.getElementById('m-task-priority').value, due_date: document.getElementById('m-task-due').value || null, assigned_to: document.getElementById('m-task-assign').value || null, project_id: parseInt(projectId) });
+        const assignVal = document.getElementById('m-task-assign').value;
+        await api('POST', '/api/tasks', {
+          title: document.getElementById('m-task-title').value,
+          description: document.getElementById('m-task-desc').value,
+          priority: document.getElementById('m-task-priority').value,
+          due_date: document.getElementById('m-task-due').value || null,
+          assigned_to: assignVal ? parseInt(assignVal) : null,
+          project_id: parseInt(projectId)
+        });
         closeModal(); toast('Task created!', 'success'); router();
       } catch (err) { toast(err.message, 'error'); }
     };
   });
 
-  // Add member
-  document.getElementById('btn-add-member')?.addEventListener('click', () => {
+  // Task card click (Edit Task modal)
+  document.querySelectorAll('.task-card').forEach(card => card.addEventListener('click', async (e) => {
+    if (card.dataset.canEdit !== 'true') return;
+    const taskId = card.dataset.taskId;
     const projectId = document.querySelector('[data-project-id]')?.dataset.projectId;
+    const userRole = document.querySelector('[data-project-id]')?.dataset.userRole;
+    const isAdmin = userRole === 'admin';
+
+    try {
+      const tasksData = await api('GET', `/api/tasks?projectId=${projectId}`);
+      const task = tasksData.tasks.find(t => t.id === parseInt(taskId));
+      if (!task) return;
+
+      const projData = await api('GET', `/api/projects/${projectId}`);
+      const members = projData.project.members || [];
+
+      openModal(`<div class="modal-header"><h2>${isAdmin ? 'Edit Task' : 'Task Details'}</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+        <form id="modal-form">
+        <div class="form-group"><label>Title</label><input class="form-control" id="m-task-title" required value="${esc(task.title)}" ${!isAdmin ? 'disabled' : ''}></div>
+        <div class="form-group"><label>Description</label><textarea class="form-control" id="m-task-desc" ${!isAdmin ? 'disabled' : ''}>${esc(task.description || '')}</textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group"><label>Status</label><select class="form-control" id="m-task-status"><option value="todo" ${task.status==='todo'?'selected':''}>To Do</option><option value="in-progress" ${task.status==='in-progress'?'selected':''}>In Progress</option><option value="done" ${task.status==='done'?'selected':''}>Done</option></select></div>
+          <div class="form-group"><label>Priority</label><select class="form-control" id="m-task-priority" ${!isAdmin ? 'disabled' : ''}><option value="low" ${task.priority==='low'?'selected':''}>Low</option><option value="medium" ${task.priority==='medium'?'selected':''}>Medium</option><option value="high" ${task.priority==='high'?'selected':''}>High</option></select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="m-task-due" value="${task.due_date || ''}" ${!isAdmin ? 'disabled' : ''}></div>
+          <div class="form-group"><label>Assign To</label><select class="form-control" id="m-task-assign" ${!isAdmin ? 'disabled' : ''}><option value="">Unassigned</option>${members.map(m => `<option value="${m.user.id}" ${task.assigned_to===m.user.id?'selected':''}>${esc(m.user.name)} (${m.role})</option>`).join('')}</select></div>
+        </div>
+        <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save Task</button></div></form>`);
+
+      document.getElementById('modal-form').onsubmit = async (evt) => {
+        evt.preventDefault();
+        try {
+          const assignVal = document.getElementById('m-task-assign').value;
+          const body = { status: document.getElementById('m-task-status').value };
+          if (isAdmin) {
+            body.title = document.getElementById('m-task-title').value;
+            body.description = document.getElementById('m-task-desc').value;
+            body.priority = document.getElementById('m-task-priority').value;
+            body.due_date = document.getElementById('m-task-due').value || null;
+            body.assigned_to = assignVal ? parseInt(assignVal) : null;
+          }
+          await api('PUT', `/api/tasks/${taskId}`, body);
+          closeModal(); toast('Task updated!', 'success'); router();
+        } catch (err) { toast(err.message, 'error'); }
+      };
+    } catch (err) { toast(err.message, 'error'); }
+  }));
+
+  // Add member modal
+  document.getElementById('btn-add-member')?.addEventListener('click', async () => {
+    const projectId = document.querySelector('[data-project-id]')?.dataset.projectId;
+    let users = [];
+    try {
+      const uData = await api('GET', '/api/auth/users');
+      users = uData.users || [];
+    } catch { users = []; }
+
     openModal(`<div class="modal-header"><h2>Add Member</h2><button class="modal-close" onclick="closeModal()">×</button></div>
-      <form id="modal-form"><div class="form-group"><label>User Email</label><input type="email" class="form-control" id="m-mem-email" required placeholder="user@example.com"></div>
+      <form id="modal-form">
+      ${users.length ? `<div class="form-group"><label>Select Registered User</label><select class="form-control" id="m-mem-select"><option value="">-- Choose existing user or enter email below --</option>${users.map(u => `<option value="${esc(u.email)}">${esc(u.name)} (${esc(u.email)})</option>`).join('')}</select></div>` : ''}
+      <div class="form-group"><label>User Email</label><input type="email" class="form-control" id="m-mem-email" required placeholder="user@example.com"></div>
       <div class="form-group"><label>Role</label><select class="form-control" id="m-mem-role"><option value="member">Member</option><option value="admin">Admin</option></select></div>
-      <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Add</button></div></form>`);
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Add Member</button></div></form>`);
+
+    const selectEl = document.getElementById('m-mem-select');
+    if (selectEl) {
+      selectEl.addEventListener('change', () => {
+        if (selectEl.value) document.getElementById('m-mem-email').value = selectEl.value;
+      });
+    }
+
     document.getElementById('modal-form').onsubmit = async (e) => {
       e.preventDefault();
-      try { await api('POST', `/api/projects/${projectId}/members`, { email: document.getElementById('m-mem-email').value, role: document.getElementById('m-mem-role').value }); closeModal(); toast('Member added!', 'success'); router(); }
-      catch (err) { toast(err.message, 'error'); }
+      try {
+        await api('POST', `/api/projects/${projectId}/members`, { email: document.getElementById('m-mem-email').value, role: document.getElementById('m-mem-role').value });
+        closeModal(); toast('Member added!', 'success'); router();
+      } catch (err) { toast(err.message, 'error'); }
     };
   });
+
+  // Change member role
+  document.querySelectorAll('[data-change-role-user]').forEach(sel => sel.addEventListener('change', async (e) => {
+    e.stopPropagation();
+    const targetUserId = sel.dataset.changeRoleUser;
+    const newRole = e.target.value;
+    const projectId = document.querySelector('[data-project-id]')?.dataset.projectId;
+    try {
+      await api('PUT', `/api/projects/${projectId}/members/${targetUserId}`, { role: newRole });
+      toast(`Role updated to ${newRole}`, 'success'); router();
+    } catch (err) { toast(err.message, 'error'); router(); }
+  }));
 
   // Remove member
   document.querySelectorAll('[data-remove-user]').forEach(b => b.addEventListener('click', async (e) => {
     e.stopPropagation();
-    if (!confirm('Remove this member?')) return;
+    if (!confirm('Remove this member from the project?')) return;
     const projectId = document.querySelector('[data-project-id]')?.dataset.projectId;
-    try { await api('DELETE', `/api/projects/${projectId}/members/${b.dataset.removeUser}`); toast('Member removed', 'success'); router(); }
-    catch (err) { toast(err.message, 'error'); }
+    try {
+      await api('DELETE', `/api/projects/${projectId}/members/${b.dataset.removeUser}`);
+      toast('Member removed', 'success'); router();
+    } catch (err) { toast(err.message, 'error'); }
   }));
 
-  // Status change
+  // Status change inline dropdown
   document.querySelectorAll('[data-task-status]').forEach(s => s.addEventListener('change', async (e) => {
-    try { await api('PUT', `/api/tasks/${s.dataset.taskStatus}`, { status: e.target.value }); toast('Status updated', 'success'); router(); }
-    catch (err) { toast(err.message, 'error'); e.target.value = e.target.dataset.prev; }
+    e.stopPropagation();
+    const prevStatus = s.dataset.prev;
+    try {
+      await api('PUT', `/api/tasks/${s.dataset.taskStatus}`, { status: e.target.value });
+      toast('Status updated', 'success'); router();
+    } catch (err) {
+      toast(err.message, 'error');
+      if (prevStatus) e.target.value = prevStatus;
+    }
   }));
 
   // Delete task
   document.querySelectorAll('[data-delete-task]').forEach(b => b.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (!confirm('Delete this task?')) return;
-    try { await api('DELETE', `/api/tasks/${b.dataset.deleteTask}`); toast('Task deleted', 'success'); router(); }
-    catch (err) { toast(err.message, 'error'); }
+    try {
+      await api('DELETE', `/api/tasks/${b.dataset.deleteTask}`);
+      toast('Task deleted', 'success'); router();
+    } catch (err) { toast(err.message, 'error'); }
   }));
 
   // Delete project
   document.getElementById('btn-delete-project')?.addEventListener('click', async () => {
     if (!confirm('Delete this project and all its tasks? This cannot be undone.')) return;
     const projectId = document.querySelector('[data-project-id]')?.dataset.projectId;
-    try { await api('DELETE', `/api/projects/${projectId}`); toast('Project deleted', 'success'); navigate('/projects'); }
-    catch (err) { toast(err.message, 'error'); }
+    try {
+      await api('DELETE', `/api/projects/${projectId}`);
+      toast('Project deleted', 'success'); navigate('/projects');
+    } catch (err) { toast(err.message, 'error'); }
   });
 }
 
 // ===== UTILITY =====
-function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
 
 // ===== INIT =====
 router();
