@@ -1,10 +1,14 @@
 const { Sequelize } = require('sequelize');
 const path = require('path');
 
+const dbStorage = process.env.VERCEL || process.env.NODE_ENV === 'production'
+  ? path.join('/tmp', 'database.sqlite')
+  : path.join(__dirname, '..', 'database.sqlite');
+
 // Database configuration — SQLite for local, can be swapped to PostgreSQL for production
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: path.join(__dirname, '..', 'database.sqlite'),
+  storage: dbStorage,
   logging: process.env.NODE_ENV === 'development' ? console.log : false,
   define: {
     timestamps: true,
