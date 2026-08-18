@@ -20,7 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Ensure Database is initialized on serverless request
+// Ensure Database is initialized on request
 let dbInitPromise = null;
 app.use(async (req, res, next) => {
   try {
@@ -57,19 +57,14 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// Start standalone server if executed directly (local dev)
-if (require.main === module) {
-  syncDatabase().then(() => {
-    console.log('✅ Database synced successfully');
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
-      console.log(`📊 API available at http://localhost:${PORT}/api`);
-    });
-  }).catch(error => {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
+// Start standalone server
+syncDatabase().then(() => {
+  console.log('✅ Database synced successfully');
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📊 API available at http://localhost:${PORT}/api`);
   });
-}
-
-// Export Express app for Vercel Serverless Functions
-module.exports = app;
+}).catch(error => {
+  console.error('❌ Failed to start server:', error);
+  process.exit(1);
+});
